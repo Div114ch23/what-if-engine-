@@ -260,10 +260,19 @@ async function main() {
   ];
 
   for (const scenario of sampleScenarios) {
-    await prisma.scenario.create({
-      data: scenario,
-    });
-  }
+  const { userId, ...scenarioData } = scenario;
+
+  await prisma.scenario.create({
+    data: {
+      ...scenarioData,
+      user: {
+        connect: {
+          id: userId,
+        },
+      },
+    },
+  });
+}
 
   console.log("✅ Seeded 4 sample commerce-decision scenarios with branches, timelines, and evidence");
 }
