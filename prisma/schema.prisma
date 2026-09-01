@@ -268,7 +268,7 @@ enum ReportStatus {
 model Subscription {
   id               String             @id @default(cuid())
   stripeCustomerId String             @unique
-  stripeSubscriptionId String?
+  stripeSubscriptionId String?        @unique
   stripePriceId    String?
   status           SubscriptionStatus @default(INCOMPLETE)
   currentPeriodStart DateTime?
