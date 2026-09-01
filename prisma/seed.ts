@@ -32,8 +32,7 @@ async function main() {
         create: [
           {
             title: "High Recovery, Manageable Cost",
-            description:
-              "Fast, personalized nudges recover a meaningful share of abandoned carts without triggering opt-outs.",
+            description: "Fast, personalized nudges recover a meaningful share of abandoned carts without triggering opt-outs.",
             probability: 45,
             orderIndex: 0,
             timeline: {
@@ -46,8 +45,7 @@ async function main() {
           },
           {
             title: "Opt-Out Fatigue",
-            description:
-              "Message frequency and timing feel intrusive; customers unsubscribe faster than expected.",
+            description: "Message frequency and timing feel intrusive; customers unsubscribe faster than expected.",
             probability: 30,
             orderIndex: 1,
             timeline: {
@@ -59,8 +57,7 @@ async function main() {
           },
           {
             title: "Compliance Friction",
-            description:
-              "Messaging-consent and data-use requirements slow rollout and limit targeting precision.",
+            description: "Messaging-consent and data-use requirements slow rollout and limit targeting precision.",
             probability: 25,
             orderIndex: 2,
             timeline: {
@@ -260,19 +257,14 @@ async function main() {
   ];
 
   for (const scenario of sampleScenarios) {
-  const { userId, ...scenarioData } = scenario;
-
-  await prisma.scenario.create({
-    data: {
-      ...scenarioData,
-      user: {
-        connect: {
-          id: userId,
-        },
+    const { userId, ...scenarioData } = scenario;
+    await prisma.scenario.create({
+      data: {
+        ...scenarioData,
+        user: { connect: { id: userId } },
       },
-    },
-  });
-}
+    });
+  }
 
   console.log("✅ Seeded 4 sample commerce-decision scenarios with branches, timelines, and evidence");
 }
