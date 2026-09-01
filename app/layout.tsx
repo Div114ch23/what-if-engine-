@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { SessionProvider } from "next-auth/react";
+import { SessionProvider } from "@/components/session-provider";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth/next";
 import { ThemeProvider } from "@/components/theme-provider";
