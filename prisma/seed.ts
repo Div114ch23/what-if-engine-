@@ -5,8 +5,19 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Seeding database...");
 
+  const seedUser = await prisma.user.upsert({
+    where: { email: "demo@whatifengine.app" },
+    update: {},
+    create: {
+      email: "demo@whatifengine.app",
+      name: "Demo Analyst",
+      role: "PREMIUM",
+    },
+  });
+
   const sampleScenarios = [
     {
+      userId: seedUser.id,
       title: "What if we auto-nudged abandoned carts via WhatsApp within 15 minutes?",
       slug: "cart-recovery-whatsapp-15min",
       description:
@@ -70,6 +81,7 @@ async function main() {
       },
     },
     {
+      userId: seedUser.id,
       title: "What if we raised premium subscription price by 12%?",
       slug: "pricing-premium-tier-12-percent",
       description:
@@ -129,6 +141,7 @@ async function main() {
       },
     },
     {
+      userId: seedUser.id,
       title: "What if we auto-contested chargebacks with AI-compiled evidence?",
       slug: "dispute-risk-ai-evidence-agent",
       description:
@@ -187,6 +200,7 @@ async function main() {
       },
     },
     {
+      userId: seedUser.id,
       title: "What if we forecasted cashflow 7 days ahead and pre-emptively delayed vendor payouts?",
       slug: "cashflow-7day-forecast-payout-delay",
       description:
