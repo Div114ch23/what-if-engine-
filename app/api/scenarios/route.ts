@@ -27,10 +27,10 @@ export async function GET(request: NextRequest) {
 
   const orderBy =
     sort === "popular"
-      ? { viewCount: "desc" }
-      : sort === "likes"
-      ? { likeCount: "desc" }
-      : { createdAt: "desc" };
+     ? { viewCount: "desc" as const }
+     : sort === "likes"
+     ? { likeCount: "desc" as const }
+     : { createdAt: "desc" as const };
 
   const scenarios = await prisma.scenario.findMany({
     where,
