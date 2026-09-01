@@ -15,7 +15,7 @@ export default async function NewScenarioPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">Create New Scenario</h1>
         <p className="text-muted-foreground mt-2">
-          Define a "What If?" question and explore its possible outcomes
+             Define a &ldquo;What If?&rdquo; question and explore its possible outcomes
         </p>
       </div>
       <ScenarioCreator />
