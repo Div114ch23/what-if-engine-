@@ -2,8 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Heart, MessageCircle, ArrowRight } from "lucide-react";
-import { formatNumber } from "@/lib/utils";
+import { GitBranch, ArrowRight } from "lucide-react";
 
 export async function PopularScenarios() {
   const scenarios = await prisma.scenario.findMany({
@@ -12,7 +11,7 @@ export async function PopularScenarios() {
     take: 6,
     include: {
       user: { select: { name: true } },
-      _count: { select: { comments: true, bookmarks: true } },
+      _count: { select: { branches: true } },
     },
   });
 
@@ -22,10 +21,10 @@ export async function PopularScenarios() {
         <div className="flex items-center justify-between mb-12">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">
-              Popular Scenarios
+              Example Scenarios
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Explore what others are simulating
+              {scenarios.length} pre-built scenarios to try the simulator on
             </p>
           </div>
           <Link
@@ -52,25 +51,15 @@ export async function PopularScenarios() {
                   <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
                     {scenario.description}
                   </p>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Eye className="h-3.5 w-3.5" />
-                      {formatNumber(scenario.viewCount)}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5">
+                      Example scenario
                     </span>
-                    <span className="flex items-center gap-1">
-                      <Heart className="h-3.5 w-3.5" />
-                      {formatNumber(scenario.likeCount)}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <MessageCircle className="h-3.5 w-3.5" />
-                      {scenario._count.comments}
+                    <span className="inline-flex items-center gap-1">
+                      <GitBranch className="h-3.5 w-3.5" />
+                      {scenario._count.branches} branches
                     </span>
                   </div>
-                  {scenario.user?.name && (
-                    <p className="text-xs text-muted-foreground mt-3">
-                      by {scenario.user.name}
-                    </p>
-                  )}
                 </CardContent>
               </Card>
             </Link>
