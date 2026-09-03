@@ -215,7 +215,7 @@ export function SimulationEngine() {
                 <TabsTrigger value="analysis">Analysis</TabsTrigger>
                 <TabsTrigger value="branches">Branches</TabsTrigger>
                 <TabsTrigger value="evidence">Agent Signals</TabsTrigger>
-                <TabsTrigger value="agents">Agent Audit</TabsTrigger>
+                <TabsTrigger value="agents">Decision Council</TabsTrigger>
                 <TabsTrigger value="insights">Insights</TabsTrigger>
               </TabsList>
 
@@ -313,8 +313,8 @@ export function SimulationEngine() {
               <TabsContent value="agents" className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Agent Audit Trail</CardTitle>
-                    <p className="text-sm text-muted-foreground">Five independent agent calls are shown before the synthesis layer. This makes disagreement and reasoning traceable.</p>
+                    <CardTitle>Decision Council</CardTitle>
+                    <p className="text-sm text-muted-foreground">Five specialized agents independently evaluate this decision before the synthesis agent makes a call. Their reasoning and disagreement are shown here, not hidden.</p>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {result.agentTrace.map((agent) => (
