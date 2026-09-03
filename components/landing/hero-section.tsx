@@ -27,9 +27,8 @@ export function HeroSection() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight max-w-4xl"
           >
-            Simulate{" "}
-            <span className="text-gradient">What If?</span>{" "}
-            Business Decisions
+            Turn Payment Signals Into{" "}
+            <span className="text-gradient">Growth Decisions</span>
           </motion.h1>
 
           <motion.p
@@ -38,10 +37,10 @@ export function HeroSection() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mt-6 text-lg text-muted-foreground max-w-2xl"
           >
-            Pricing changes, cart recovery, subscription churn, dispute risk,
-            cashflow shortfalls — five parallel AI agents analyze each decision
-            from a different lens, then a synthesis agent turns their outputs
-            into one scored recommendation.
+            What If? Engine is an agentic decision platform for merchants. It
+            analyzes Razorpay payment signals, simulates business outcomes, and
+            recommends the next action — with merchant approval and safety
+            controls at every step.
           </motion.p>
 
           <motion.div
@@ -51,14 +50,23 @@ export function HeroSection() {
             className="mt-10 flex flex-col sm:flex-row gap-4"
           >
             <Button size="lg" asChild>
-              <Link href="/simulate">
-                Start Simulating <ArrowRight className="ml-2 h-4 w-4" />
+              <Link href="/growth">
+                Open Growth Studio <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
-              <Link href="/scenarios">Explore Scenarios</Link>
+              <Link href="/simulate">Explore Simulations</Link>
             </Button>
           </motion.div>
+
+          <motion.p
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="mt-6 text-xs text-muted-foreground tracking-wide uppercase"
+          >
+            Built with Razorpay Test Mode &middot; Multi-Agent AI &middot; Human-in-the-loop
+          </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 40 }}
