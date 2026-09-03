@@ -13,7 +13,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "What If? Engine — Agentic Decision Studio for Commerce",
+  title: "What If? Engine — Agentic Decision Studio for Merchants",
   description:
     "Simulate pricing, cart-recovery, subscription-churn, dispute-risk, and cashflow decisions through five parallel AI agents and a synthesis layer, before you commit.",
   keywords: [
