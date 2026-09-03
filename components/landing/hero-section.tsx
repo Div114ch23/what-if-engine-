@@ -7,7 +7,7 @@ import { ArrowRight, Sparkles, Brain, GitBranch } from "lucide-react";
 
 export function HeroSection() {
   return (
-    <section className="relative overflow-hidden py-20 lg:py-32">
+    <section className="relative overflow-hidden pt-20 lg:pt-32 pb-8 lg:pb-12">
       <div className="container mx-auto px-4">
         <div className="flex flex-col items-center text-center">
           <motion.div
@@ -72,8 +72,12 @@ export function HeroSection() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.5 }}
-            className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-3xl"
+            className="mt-12 w-full max-w-3xl"
           >
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-6">
+              How the engine thinks
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             <div className="flex flex-col items-center gap-3 p-6 rounded-xl border bg-card">
               <Brain className="h-8 w-8 text-blue-500" />
               <h3 className="font-semibold">5 Parallel Agents</h3>
@@ -94,6 +98,7 @@ export function HeroSection() {
               <p className="text-sm text-muted-foreground">
                 A synthesis agent reconciles disagreement into one call
               </p>
+            </div>
             </div>
           </motion.div>
         </div>

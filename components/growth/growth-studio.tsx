@@ -187,15 +187,22 @@ export function GrowthStudio() {
           <CardContent className="space-y-5">
             <p className="text-lg leading-relaxed">{plan.recommendation}</p>
             <div className="grid md:grid-cols-2 gap-6">
-              <div><h3 className="font-semibold mb-2">Why</h3><ul className="space-y-2 text-sm">{plan.rationale.map((x, i) => <li key={i}>• {x}</li>)}</ul></div>
+              <div><h3 className="font-semibold mb-2">Why this action?</h3><ul className="space-y-2 text-sm">{plan.rationale.map((x, i) => <li key={i}>• {x}</li>)}</ul></div>
               <div><h3 className="font-semibold mb-2">Guardrails</h3><ul className="space-y-2 text-sm">{plan.guardrails.map((x, i) => <li key={i}>• {x}</li>)}</ul></div>
             </div>
+            <Alert>
+              <ShieldCheck className="h-4 w-4" />
+              <AlertTitle>🛡️ Merchant approval required</AlertTitle>
+              <AlertDescription>
+                No action is taken automatically. Executing below runs a single bounded action in Razorpay <strong>Test Mode only</strong>, capped between ₹1 and ₹10,000, and is logged to the audit trail.
+              </AlertDescription>
+            </Alert>
             <div className="rounded-lg border p-4 flex flex-wrap items-center justify-between gap-4">
               <div><p className="text-sm text-muted-foreground">Estimated lift</p><p className="font-bold text-xl">{plan.expectedImpact.revenueLiftPercent}%</p></div>
               <div><p className="text-sm text-muted-foreground">Bounded test amount</p><p className="font-bold text-xl">{rupees(plan.testOfferAmount / 100)}</p></div>
               <Button onClick={executeBoundedTest} disabled={executing || !connected || plan.action === "DO_NOTHING"}>
                 {executing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                Execute TEST action
+                Approve &amp; Execute TEST action
               </Button>
             </div>
             {!connected && <p className="text-xs text-muted-foreground">Execution is disabled until a Razorpay rzp_test_ key pair is configured.</p>}

@@ -35,7 +35,7 @@ export async function PopularScenarios() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {scenarios.map((scenario) => (
             <Link key={scenario.id} href={`/scenarios/${scenario.slug}`}>
               <Card className="h-full hover:shadow-lg transition-all group">

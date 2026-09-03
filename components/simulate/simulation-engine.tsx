@@ -269,7 +269,7 @@ export function SimulationEngine() {
                                   <Badge variant="outline" className="mb-1">Year {event.year}</Badge>
                                   <h4 className="font-medium">{event.title}</h4>
                                   <p className="text-sm text-muted-foreground mt-1">{event.description}</p>
-                                  <p className="text-sm mt-2"><span className="font-medium">Impact:</span> {event.impact}</p>
+                                  <p className="text-sm mt-2"><span className="font-medium">Projected Impact:</span> {event.impact}</p>
                                 </div>
                               ))}
                             </div>

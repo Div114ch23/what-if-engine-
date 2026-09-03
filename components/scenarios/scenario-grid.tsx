@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Heart, MessageCircle, GitBranch } from "lucide-react";
-import { formatNumber, truncateText } from "@/lib/utils";
+import { MessageCircle, GitBranch } from "lucide-react";
+import { truncateText } from "@/lib/utils";
 
 interface ScenarioGridProps {
   scenarios: Array<{
@@ -53,14 +53,9 @@ export function ScenarioGrid({ scenarios }: ScenarioGridProps) {
               <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
                 {truncateText(scenario.description, 120)}
               </p>
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Eye className="h-3.5 w-3.5" />
-                  {formatNumber(scenario.viewCount)}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Heart className="h-3.5 w-3.5" />
-                  {formatNumber(scenario.likeCount)}
+              <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5">
+                  Example scenario
                 </span>
                 <span className="flex items-center gap-1">
                   <MessageCircle className="h-3.5 w-3.5" />
