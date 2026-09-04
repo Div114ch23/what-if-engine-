@@ -1,9 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { generateGeminiText } from "@/lib/gemini";
 import { z } from "zod";
 import type { MerchantMetrics } from "@/lib/merchant-analytics";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = "claude-sonnet-4-6";
 
 const planSchema = z.object({
   recommendation: z.string().min(1).max(1200),
@@ -44,16 +41,15 @@ Rules:
   "testOfferAmount": 49900
 }`;
 
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1800,
-    temperature: 0.2,
-    system: "You are a careful AI revenue-growth controller for a Razorpay merchant sandbox.",
-    messages: [{ role: "user", content: prompt }],
-  });
-  const block = response.content.find((item) => item.type === "text");
-  if (!block || block.type !== "text") throw new Error("Growth agent returned no text.");
-  const parsed = planSchema.safeParse(parseJson(block.text));
+  const text = await generateGeminiText({
+  system:
+    "You are a careful AI revenue-growth controller for a Razorpay merchant sandbox.",
+  prompt,
+  maxTokens: 1800,
+  temperature: 0.2,
+});
+
+const parsed = planSchema.safeParse(parseJson(text));
   if (!parsed.success) throw new Error(`Growth agent returned invalid structured output: ${parsed.error.message}`);
   return parsed.data;
 }

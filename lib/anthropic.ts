@@ -1,11 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
-const MODEL = "claude-sonnet-4-6";
+import { generateGeminiText } from "@/lib/gemini";
 
 export interface SimulationInput {
   query: string;
@@ -40,16 +34,10 @@ export interface SimulationResult {
 }
 
 /* ---------------------------------------------------------------------- *
- * AGENT LAYER — built on the Claude Agent SDK / Anthropic API
+ * AGENT LAYER
  *
- * Five specialized agents run as genuinely independent, PARALLEL model
- * calls (Promise.all), each analyzing the same decision from one lens.
- * A sixth "Synthesis Agent" then resolves disagreement between them into
- * a single scored recommendation. This mirrors how Razorpay's Agent
- * Studio deploys purpose-built agents (Cart Recovery, Dispute Responder,
- * Subscription Recovery, Cashflow Forecast) — also built on Anthropic's
- * Claude Agent SDK — that act independently but feed one unified
- * business outcome.
+ * Five specialized agents run independently in parallel using Gemini.
+ * A sixth Synthesis Agent resolves disagreement between them.
  * ---------------------------------------------------------------------- */
 
 interface AgentDefinition {
@@ -62,7 +50,7 @@ interface AgentOutput {
   agentId: string;
   agentName: string;
   stance: "favorable" | "unfavorable" | "mixed";
-  confidence: number; // 0-100, this agent's confidence in its own read
+  confidence: number;
   summary: string;
   supportingPoints: string[];
   flaggedRisks: string[];
@@ -102,7 +90,6 @@ const AGENTS: AgentDefinition[] = [
   },
 ];
 
-
 const agentOutputSchema = z.object({
   stance: z.enum(["favorable", "unfavorable", "mixed"]),
   confidence: z.number().min(0).max(100),
@@ -114,11 +101,36 @@ const agentOutputSchema = z.object({
 
 const simulationSchema = z.object({
   analysis: z.string().min(1),
-  branches: z.array(z.object({
-    title: z.string().min(1), description: z.string(), probability: z.number().min(0).max(100),
-    timeline: z.array(z.object({ year: z.number().int(), title: z.string(), description: z.string(), impact: z.string() })).max(6),
-  })).min(2).max(3),
-  evidence: z.array(z.object({ title: z.string(), source: z.string(), summary: z.string(), credibility: z.number().min(1).max(10) })).max(8),
+  branches: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        description: z.string(),
+        probability: z.number().min(0).max(100),
+        timeline: z
+          .array(
+            z.object({
+              year: z.number().int(),
+              title: z.string(),
+              description: z.string(),
+              impact: z.string(),
+            })
+          )
+          .max(6),
+      })
+    )
+    .min(2)
+    .max(3),
+  evidence: z
+    .array(
+      z.object({
+        title: z.string(),
+        source: z.string(),
+        summary: z.string(),
+        credibility: z.number().min(1).max(10),
+      })
+    )
+    .max(8),
   confidence: z.number().min(0).max(100),
   keyInsights: z.array(z.string()).max(8),
   risks: z.array(z.string()).max(8),
@@ -149,27 +161,30 @@ async function runAgent(
 ): Promise<AgentOutput> {
   const userPrompt = `Business decision to evaluate: "${input.query}"
 Category: ${input.category}
-${input.parameters ? `Additional context: ${JSON.stringify(input.parameters)}` : ""}
+${
+  input.parameters
+    ? `Additional context: ${JSON.stringify(input.parameters)}`
+    : ""
+}
 
 Analyze this strictly from your lens as the ${agent.name}. Do not try to cover other perspectives.
 
 ${AGENT_OUTPUT_INSTRUCTIONS}`;
 
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    temperature: 0.6,
+  const text = await generateGeminiText({
     system: agent.systemPrompt,
-    messages: [{ role: "user", content: userPrompt }],
+    prompt: userPrompt,
+    maxTokens: 1024,
+    temperature: 0.6,
   });
 
-  const textBlock = response.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error(`Empty response from ${agent.name}`);
-  }
+  const parsed = agentOutputSchema.safeParse(extractJson(text));
 
-  const parsed = agentOutputSchema.safeParse(extractJson(textBlock.text));
-  if (!parsed.success) throw new Error(`${agent.name} returned invalid structured output: ${parsed.error.message}`);
+  if (!parsed.success) {
+    throw new Error(
+      `${agent.name} returned invalid structured output: ${parsed.error.message}`
+    );
+  }
 
   return {
     agentId: agent.id,
@@ -179,11 +194,8 @@ ${AGENT_OUTPUT_INSTRUCTIONS}`;
 }
 
 /**
- * Runs all five domain agents in TRUE PARALLEL (Promise.all — separate,
- * concurrent Claude API calls, not one prompt roleplaying multiple
- * personas), then passes their structured outputs to a Synthesis Agent
- * that resolves disagreement (e.g. Revenue says yes, Risk says no) into
- * one weighted recommendation rather than a naive average.
+ * Runs all five domain agents in TRUE PARALLEL (Promise.all),
+ * then passes their structured outputs to a Synthesis Agent.
  */
 export async function generateSimulation(
   input: SimulationInput
@@ -205,12 +217,22 @@ Respond with ONLY valid JSON, no markdown code fences, no preamble, matching thi
       "description": "<what happens>",
       "probability": <0-100>,
       "timeline": [
-        { "year": <int>, "title": "<milestone>", "description": "<detail>", "impact": "<effect>" }
+        {
+          "year": <int>,
+          "title": "<milestone>",
+          "description": "<detail>",
+          "impact": "<effect>"
+        }
       ]
     }
   ],
   "evidence": [
-    { "title": "<agent-derived data point>", "source": "<which agent>", "summary": "<detail>", "credibility": <1-10> }
+    {
+      "title": "<agent-derived data point>",
+      "source": "<which agent>",
+      "summary": "<detail>",
+      "credibility": <1-10>
+    }
   ],
   "confidence": <0-100, overall synthesized confidence>,
   "keyInsights": ["<insight>", "..."],
@@ -228,29 +250,35 @@ ${JSON.stringify(agentOutputs, null, 2)}
 
 Synthesize these into one unified recommendation per the required JSON shape.`;
 
-  const synthesisResponse = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 4096,
-    temperature: 0.5,
+  const synthesisText = await generateGeminiText({
     system: synthesisSystemPrompt,
-    messages: [{ role: "user", content: synthesisUserPrompt }],
+    prompt: synthesisUserPrompt,
+    maxTokens: 4096,
+    temperature: 0.5,
   });
 
-  const textBlock = synthesisResponse.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Empty response from Synthesis Agent");
+  const parsedResult = simulationSchema.safeParse(
+    extractJson(synthesisText)
+  );
+
+  if (!parsedResult.success) {
+    throw new Error(
+      `Synthesis Agent returned invalid structured output: ${parsedResult.error.message}`
+    );
   }
 
-  const parsedResult = simulationSchema.safeParse(extractJson(textBlock.text));
-  if (!parsedResult.success) throw new Error(`Synthesis Agent returned invalid structured output: ${parsedResult.error.message}`);
   const parsed = parsedResult.data;
 
   return {
     analysis: parsed.analysis || "No analysis generated",
+
     branches: (parsed.branches || []).map((b: any) => ({
       title: b.title || "Untitled Branch",
       description: b.description || "",
-      probability: Math.min(100, Math.max(0, b.probability || 50)),
+      probability: Math.min(
+        100,
+        Math.max(0, b.probability || 50)
+      ),
       timeline: (b.timeline || []).map((t: any) => ({
         year: t.year || new Date().getFullYear(),
         title: t.title || "",
@@ -258,13 +286,22 @@ Synthesize these into one unified recommendation per the required JSON shape.`;
         impact: t.impact || "",
       })),
     })),
+
     evidence: (parsed.evidence || []).map((e: any) => ({
       title: e.title || "",
       source: e.source || "",
       summary: e.summary || "",
-      credibility: Math.min(10, Math.max(1, e.credibility || 5)),
+      credibility: Math.min(
+        10,
+        Math.max(1, e.credibility || 5)
+      ),
     })),
-    confidence: Math.min(100, Math.max(0, parsed.confidence || 50)),
+
+    confidence: Math.min(
+      100,
+      Math.max(0, parsed.confidence || 50)
+    ),
+
     keyInsights: parsed.keyInsights || [],
     risks: parsed.risks || [],
     opportunities: parsed.opportunities || [],
@@ -272,25 +309,21 @@ Synthesize these into one unified recommendation per the required JSON shape.`;
   };
 }
 
-export async function generateScenarioFromQuery(query: string): Promise<{
+export async function generateScenarioFromQuery(
+  query: string
+): Promise<{
   title: string;
   description: string;
   category: string;
   tags: string[];
 }> {
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    temperature: 0.7,
+  const text = await generateGeminiText({
     system:
-      'You are a business-decision scenario generator for an agentic commerce decision studio. Given a user query about a business decision, generate a structured scenario. Respond with ONLY valid JSON, no markdown code fences, no preamble, with: title, description, category (one of: PRICING, CART_RECOVERY, SUBSCRIPTION_CHURN, MARKET_ENTRY, DISPUTE_RISK, CASHFLOW, GROWTH, CUSTOMER_RETENTION), tags (array of strings).',
-    messages: [{ role: "user", content: query }],
+      "You are a business-decision scenario generator for an agentic commerce decision studio. Given a user query about a business decision, generate a structured scenario. Respond with ONLY valid JSON, no markdown code fences, no preamble, with: title, description, category (one of: PRICING, CART_RECOVERY, SUBSCRIPTION_CHURN, MARKET_ENTRY, DISPUTE_RISK, CASHFLOW, GROWTH, CUSTOMER_RETENTION), tags (array of strings).",
+    prompt: query,
+    maxTokens: 1024,
+    temperature: 0.7,
   });
 
-  const textBlock = response.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Empty response");
-  }
-
-  return extractJson(textBlock.text);
+  return extractJson(text);
 }
