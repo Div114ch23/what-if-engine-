@@ -660,3 +660,61 @@ Synthesize these assessments into the required structured output.`;
 
   return createFallbackSynthesis();
 }
+export async function generateScenarioFromQuery(
+  query: string
+): Promise<{
+  title: string;
+  description: string;
+  category: string;
+  tags: string[];
+}> {
+  const text = await generateGeminiText({
+    system:
+      "You are a business-decision scenario generator. Return concise valid JSON containing title, description, category, and tags.",
+
+    prompt: query,
+
+    maxTokens: 1024,
+
+    temperature: 0.5,
+
+    responseJsonSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+        },
+        description: {
+          type: "string",
+        },
+        category: {
+          type: "string",
+          enum: [
+            "PRICING",
+            "CART_RECOVERY",
+            "SUBSCRIPTION_CHURN",
+            "MARKET_ENTRY",
+            "DISPUTE_RISK",
+            "CASHFLOW",
+            "GROWTH",
+            "CUSTOMER_RETENTION",
+          ],
+        },
+        tags: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+        },
+      },
+      required: [
+        "title",
+        "description",
+        "category",
+        "tags",
+      ],
+    },
+  });
+
+  return extractJson(text);
+}
