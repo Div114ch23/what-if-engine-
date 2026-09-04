@@ -15,8 +15,22 @@ const planSchema = z.object({
 });
 
 function parseJson(text: string) {
-  const fenced = text.trim().match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  return JSON.parse(fenced ? fenced[1] : text.trim());
+  let cleaned = text.trim();
+
+  const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced) {
+    cleaned = fenced[1].trim();
+  }
+
+  // Remove accidental leading/trailing text around the JSON object
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+
+  if (firstBrace !== -1 && lastBrace !== -1) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+
+  return JSON.parse(cleaned);
 }
 
 export async function generateGrowthPlan(metrics: MerchantMetrics) {
@@ -45,7 +59,7 @@ Rules:
   system:
     "You are a careful AI revenue-growth controller for a Razorpay merchant sandbox.",
   prompt,
-  maxTokens: 1800,
+  maxTokens: 1200,
   temperature: 0.2,
 });
 
