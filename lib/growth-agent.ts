@@ -36,6 +36,77 @@ function parseJson(text: string) {
   return JSON.parse(jsonText);
 }
 
+function fallbackPlan(metrics: MerchantMetrics) {
+  if (metrics.failedPaymentCount > 0) {
+    return {
+      recommendation:
+        "Prioritize recovery of failed payments with a small bounded TEST MODE recovery flow.",
+      action: "RECOVER" as const,
+      rationale: [
+        `${metrics.failedPaymentCount} failed payment attempt(s) are visible in the supplied merchant data.`,
+        "Recovering failed payments is more directly supported by the available data than introducing a larger new offer.",
+      ],
+      expectedImpact: {
+        revenueLiftPercent: 3,
+        confidence: 55,
+      },
+      guardrails: [
+        "Run only in Razorpay TEST MODE.",
+        "Use a small bounded test amount.",
+        "Do not treat the estimate as guaranteed revenue.",
+      ],
+      testOfferAmount: Math.min(
+        Math.max(metrics.averageOrderValue || 49900, 100),
+        1000000
+      ),
+    };
+  }
+
+  if (metrics.paidOrderCount > 0) {
+    return {
+      recommendation:
+        "Test a small upsell against the existing successful-order base.",
+      action: "UPSELL" as const,
+      rationale: [
+        `${metrics.paidOrderCount} successful order(s) are present in the supplied data.`,
+        "A small upsell test is bounded and can be evaluated before any broader rollout.",
+      ],
+      expectedImpact: {
+        revenueLiftPercent: 2,
+        confidence: 50,
+      },
+      guardrails: [
+        "Run only in Razorpay TEST MODE.",
+        "Keep the test amount small and bounded.",
+        "Do not treat the estimate as guaranteed revenue.",
+      ],
+      testOfferAmount: Math.min(
+        Math.max(metrics.averageOrderValue || 49900, 100),
+        1000000
+      ),
+    };
+  }
+
+  return {
+    recommendation:
+      "Do not make a growth intervention yet because the current dataset is too small to justify one.",
+    action: "DO_NOTHING" as const,
+    rationale: [
+      "The supplied merchant dataset contains insufficient successful payment history.",
+      "Waiting for more TEST MODE activity reduces the risk of making an unsupported recommendation.",
+    ],
+    expectedImpact: {
+      revenueLiftPercent: 0,
+      confidence: 80,
+    },
+    guardrails: [
+      "Do not execute a real-money action.",
+      "Collect more TEST MODE payment data before changing strategy.",
+    ],
+    testOfferAmount: 49900,
+  };
+}
+
 export async function generateGrowthPlan(
   metrics: MerchantMetrics
 ) {
@@ -44,8 +115,6 @@ export async function generateGrowthPlan(
 Your job is to recommend exactly ONE bounded revenue-growth intervention.
 
 Never claim that a forecast is guaranteed.
-
-Prefer recovery of failed payments or a small upsell when supported by the supplied data.
 
 Merchant metrics:
 
@@ -60,105 +129,107 @@ Rules:
   UPSELL
   OPTIMIZE_CHECKOUT
   DO_NOTHING
-
 - Give a conservative estimated revenue lift percentage.
 - Confidence must be between 0 and 100.
 - testOfferAmount is an INR amount in paise.
 - testOfferAmount must be between 100 and 1,000,000 paise.
-- Include at least 2 clear rationale points.
-- Include at least 2 explicit safety guardrails.
-- Keep the recommendation practical and bounded.
+- Include at least 2 rationale points.
+- Include at least 2 safety guardrails.
 - This is Razorpay TEST MODE only.
-- Never imply that real customer money will be charged.
 - Never guarantee revenue.
+- Return ONLY valid JSON.
+`;
 
-Return only the requested structured JSON.`;
+  try {
+    const text = await generateGeminiText({
+      system:
+        "You are a careful AI revenue-growth controller for a Razorpay merchant sandbox. Return only valid JSON.",
 
-  const text = await generateGeminiText({
-    system:
-      "You are a careful AI revenue-growth controller for a Razorpay merchant sandbox. Always follow the requested JSON structure exactly.",
+      prompt,
 
-    prompt,
+      maxTokens: 1200,
 
-    maxTokens: 1200,
+      temperature: 0.1,
 
-    temperature: 0.2,
+      responseJsonSchema: {
+        type: "object",
 
-    responseJsonSchema: {
-      type: "OBJECT",
-
-      properties: {
-        recommendation: {
-          type: "STRING",
-        },
-
-        action: {
-          type: "STRING",
-          enum: [
-            "RECOVER",
-            "UPSELL",
-            "OPTIMIZE_CHECKOUT",
-            "DO_NOTHING",
-          ],
-        },
-
-        rationale: {
-          type: "ARRAY",
-          items: {
-            type: "STRING",
+        properties: {
+          recommendation: {
+            type: "string",
           },
-        },
 
-        expectedImpact: {
-          type: "OBJECT",
+          action: {
+            type: "string",
+            enum: [
+              "RECOVER",
+              "UPSELL",
+              "OPTIMIZE_CHECKOUT",
+              "DO_NOTHING",
+            ],
+          },
 
-          properties: {
-            revenueLiftPercent: {
-              type: "NUMBER",
-            },
-
-            confidence: {
-              type: "NUMBER",
+          rationale: {
+            type: "array",
+            items: {
+              type: "string",
             },
           },
 
-          required: [
-            "revenueLiftPercent",
-            "confidence",
-          ],
-        },
+          expectedImpact: {
+            type: "object",
+            properties: {
+              revenueLiftPercent: {
+                type: "number",
+              },
 
-        guardrails: {
-          type: "ARRAY",
+              confidence: {
+                type: "number",
+              },
+            },
+            required: [
+              "revenueLiftPercent",
+              "confidence",
+            ],
+          },
 
-          items: {
-            type: "STRING",
+          guardrails: {
+            type: "array",
+            items: {
+              type: "string",
+            },
+          },
+
+          testOfferAmount: {
+            type: "integer",
           },
         },
 
-        testOfferAmount: {
-          type: "INTEGER",
-        },
+        required: [
+          "recommendation",
+          "action",
+          "rationale",
+          "expectedImpact",
+          "guardrails",
+          "testOfferAmount",
+        ],
       },
+    });
 
-      required: [
-        "recommendation",
-        "action",
-        "rationale",
-        "expectedImpact",
-        "guardrails",
-        "testOfferAmount",
-      ],
-    },
-  });
+    const parsed = planSchema.safeParse(parseJson(text));
 
-  const parsed = planSchema.safeParse(parseJson(text));
+    if (parsed.success) {
+      return parsed.data;
+    }
 
-  if (!parsed.success) {
-    throw new Error(
-      `Growth agent returned invalid structured output: ${parsed.error.message}`
+    console.error(
+      "Gemini returned invalid growth plan:",
+      parsed.error.message
     );
+  } catch (error) {
+    console.error("Gemini growth analysis failed:", error);
   }
 
-  return parsed.data;
+  // Never let AI failure break the Growth Studio.
+  return fallbackPlan(metrics);
 }
