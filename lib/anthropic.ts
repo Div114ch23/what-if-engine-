@@ -312,6 +312,120 @@ function extractJson(text: string): any {
   return JSON.parse(jsonText);
 }
 
+function fallbackAgentOutput(
+  agent: AgentDefinition,
+  input: SimulationInput
+): AgentOutput {
+  const query = input.query.toLowerCase();
+
+  if (agent.id === "revenue_growth") {
+    return {
+      agentId: agent.id,
+      agentName: agent.name,
+      stance:
+        query.includes("price") || query.includes("10%")
+          ? "favorable"
+          : "mixed",
+      confidence: 60,
+      summary:
+        "A controlled change could improve revenue per customer, but the outcome depends on how conversion responds.",
+      supportingPoints: [
+        "Higher price can increase revenue per successful customer.",
+        "A bounded test can reveal whether conversion remains resilient.",
+      ],
+      flaggedRisks: [
+        "Lower conversion could offset the higher price.",
+      ],
+      flaggedOpportunities: [
+        "Test the change with a limited customer segment first.",
+      ],
+    };
+  }
+
+  if (agent.id === "risk_compliance") {
+    return {
+      agentId: agent.id,
+      agentName: agent.name,
+      stance: "mixed",
+      confidence: 65,
+      summary:
+        "The main risk is unintended customer or dispute impact if the price change is introduced without clear communication and controls.",
+      supportingPoints: [
+        "A controlled rollout reduces exposure.",
+        "Monitoring complaints and payment outcomes provides early warning.",
+      ],
+      flaggedRisks: [
+        "Customer dissatisfaction may increase.",
+        "Unexpected payment or dispute behavior could emerge.",
+      ],
+      flaggedOpportunities: [
+        "Use explicit guardrails and monitoring during rollout.",
+      ],
+    };
+  }
+
+  if (agent.id === "customer_retention") {
+    return {
+      agentId: agent.id,
+      agentName: agent.name,
+      stance: "unfavorable",
+      confidence: 65,
+      summary:
+        "A price increase may increase churn among price-sensitive subscribers, especially if perceived value does not increase.",
+      supportingPoints: [
+        "Existing subscribers may react more strongly to a price increase.",
+        "Retention should be monitored alongside revenue.",
+      ],
+      flaggedRisks: [
+        "Higher churn among price-sensitive customers.",
+      ],
+      flaggedOpportunities: [
+        "Test messaging or value additions alongside the price change.",
+      ],
+    };
+  }
+
+  if (agent.id === "cashflow_finance") {
+    return {
+      agentId: agent.id,
+      agentName: agent.name,
+      stance: "favorable",
+      confidence: 60,
+      summary:
+        "If conversion and retention remain stable, higher realized price can improve near-term revenue and cash generation.",
+      supportingPoints: [
+        "Higher realized revenue per successful subscription can improve cash generation.",
+        "A controlled rollout limits financial downside.",
+      ],
+      flaggedRisks: [
+        "Lower volume could reduce total cash generation.",
+      ],
+      flaggedOpportunities: [
+        "Measure revenue per subscriber before expanding the change.",
+      ],
+    };
+  }
+
+  return {
+    agentId: agent.id,
+    agentName: agent.name,
+    stance: "mixed",
+    confidence: 55,
+    summary:
+      "Competitive response and market positioning should be monitored before scaling the decision.",
+    supportingPoints: [
+      "Customer price sensitivity can affect competitive positioning.",
+      "A controlled experiment provides evidence before broad rollout.",
+    ],
+    flaggedRisks: [
+      "Competitors may appear more attractive if their pricing remains lower.",
+    ],
+    flaggedOpportunities: [
+      "Use differentiated value messaging to reduce competitive pressure.",
+    ],
+  };
+}
+
 async function runAgent(
   agent: AgentDefinition,
   input: SimulationInput
@@ -331,29 +445,36 @@ Analyze this strictly from your lens as the ${agent.name}.
 Return a concise structured assessment.
 Do not discuss other agent perspectives.`;
 
-  const text = await generateGeminiText({
-    system: agent.systemPrompt,
-    prompt: userPrompt,
-    maxTokens: 1200,
-    temperature: 0.3,
-    responseJsonSchema: AGENT_OUTPUT_SCHEMA,
-  });
+  try {
+    const text = await generateGeminiText({
+      system: agent.systemPrompt,
+      prompt: userPrompt,
+      maxTokens: 1200,
+      temperature: 0.3,
+      responseJsonSchema: AGENT_OUTPUT_SCHEMA,
+    });
 
-  const parsed = agentOutputSchema.safeParse(
-    extractJson(text)
-  );
+    const parsed = agentOutputSchema.safeParse(extractJson(text));
 
-  if (!parsed.success) {
-    throw new Error(
-      `${agent.name} returned invalid structured output: ${parsed.error.message}`
+    if (!parsed.success) {
+      throw new Error(
+        `${agent.name} returned invalid structured output: ${parsed.error.message}`
+      );
+    }
+
+    return {
+      agentId: agent.id,
+      agentName: agent.name,
+      ...parsed.data,
+    };
+  } catch (error) {
+    console.warn(
+      `${agent.name} unavailable; using fallback agent output.`,
+      error
     );
-  }
 
-  return {
-    agentId: agent.id,
-    agentName: agent.name,
-    ...parsed.data,
-  };
+    return fallbackAgentOutput(agent, input);
+  }
 }
 
 /**
@@ -668,53 +789,123 @@ export async function generateScenarioFromQuery(
   category: string;
   tags: string[];
 }> {
-  const text = await generateGeminiText({
-    system:
-      "You are a business-decision scenario generator. Return concise valid JSON containing title, description, category, and tags.",
+  try {
+    const text = await generateGeminiText({
+      system:
+        "You are a business-decision scenario generator. Return concise valid JSON containing title, description, category, and tags.",
 
-    prompt: query,
+      prompt: query,
 
-    maxTokens: 1024,
+      maxTokens: 1024,
 
-    temperature: 0.5,
+      temperature: 0.5,
 
-    responseJsonSchema: {
-      type: "object",
-      properties: {
-        title: {
-          type: "string",
-        },
-        description: {
-          type: "string",
-        },
-        category: {
-          type: "string",
-          enum: [
-            "PRICING",
-            "CART_RECOVERY",
-            "SUBSCRIPTION_CHURN",
-            "MARKET_ENTRY",
-            "DISPUTE_RISK",
-            "CASHFLOW",
-            "GROWTH",
-            "CUSTOMER_RETENTION",
-          ],
-        },
-        tags: {
-          type: "array",
-          items: {
+      responseJsonSchema: {
+        type: "object",
+        properties: {
+          title: {
             type: "string",
           },
+          description: {
+            type: "string",
+          },
+          category: {
+            type: "string",
+            enum: [
+              "PRICING",
+              "CART_RECOVERY",
+              "SUBSCRIPTION_CHURN",
+              "MARKET_ENTRY",
+              "DISPUTE_RISK",
+              "CASHFLOW",
+              "GROWTH",
+              "CUSTOMER_RETENTION",
+            ],
+          },
+          tags: {
+            type: "array",
+            items: {
+              type: "string",
+            },
+          },
         },
+        required: [
+          "title",
+          "description",
+          "category",
+          "tags",
+        ],
       },
-      required: [
-        "title",
-        "description",
-        "category",
-        "tags",
-      ],
-    },
-  });
+    });
 
-  return extractJson(text);
+    return extractJson(text);
+  } catch (error) {
+    console.warn(
+      "Gemini scenario generation unavailable. Using local fallback:",
+      error
+    );
+
+    const lower = query.toLowerCase();
+
+    let category = "GROWTH";
+
+    if (
+      lower.includes("price") ||
+      lower.includes("pricing") ||
+      lower.includes("raise") ||
+      lower.includes("increase price")
+    ) {
+      category = "PRICING";
+    } else if (
+      lower.includes("churn") ||
+      lower.includes("cancel") ||
+      lower.includes("retention")
+    ) {
+      category = "SUBSCRIPTION_CHURN";
+    } else if (
+      lower.includes("cart") ||
+      lower.includes("checkout") ||
+      lower.includes("recover")
+    ) {
+      category = "CART_RECOVERY";
+    } else if (
+      lower.includes("dispute") ||
+      lower.includes("chargeback") ||
+      lower.includes("fraud")
+    ) {
+      category = "DISPUTE_RISK";
+    } else if (
+      lower.includes("cash") ||
+      lower.includes("cashflow") ||
+      lower.includes("runway")
+    ) {
+      category = "CASHFLOW";
+    } else if (
+      lower.includes("market") ||
+      lower.includes("competitor") ||
+      lower.includes("competition")
+    ) {
+      category = "MARKET_ENTRY";
+    } else if (
+      lower.includes("customer") ||
+      lower.includes("customer experience")
+    ) {
+      category = "CUSTOMER_RETENTION";
+    }
+
+    return {
+      title:
+        query.length > 70
+          ? `${query.slice(0, 67)}...`
+          : query,
+      description:
+        "A business decision scenario generated in resilient demo mode.",
+      category,
+      tags: [
+        "AI simulation",
+        "business decision",
+        category.toLowerCase(),
+      ],
+    };
+  }
 }
