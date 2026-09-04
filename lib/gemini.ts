@@ -5,11 +5,13 @@ export async function generateGeminiText({
   prompt,
   maxTokens = 2048,
   temperature = 0.5,
+  responseJsonSchema,
 }: {
   system?: string;
   prompt: string;
   maxTokens?: number;
   temperature?: number;
+  responseJsonSchema?: object;
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
 
@@ -31,16 +33,24 @@ export async function generateGeminiText({
               parts: [{ text: system }],
             }
           : undefined,
+
         contents: [
           {
             role: "user",
             parts: [{ text: prompt }],
           },
         ],
+
         generationConfig: {
           temperature,
           maxOutputTokens: maxTokens,
           responseMimeType: "application/json",
+
+          ...(responseJsonSchema
+            ? {
+                responseSchema: responseJsonSchema,
+              }
+            : {}),
         },
       }),
     }
@@ -48,6 +58,7 @@ export async function generateGeminiText({
 
   if (!response.ok) {
     const errorText = await response.text();
+
     throw new Error(
       `Gemini API error ${response.status}: ${errorText}`
     );
