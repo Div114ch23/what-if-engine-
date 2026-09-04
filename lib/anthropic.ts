@@ -367,7 +367,194 @@ export async function generateSimulation(
     AGENTS.map((agent) => runAgent(agent, input))
   );
 
-  const synthesisSystemPrompt = `You are the Synthesis Agent for an agentic business-decision studio.
+  /*
+   * The five agents above are the main AI analysis layer.
+   *
+   * Gemini free-tier projects can hit the per-minute request limit
+   * immediately after these five parallel requests. Therefore the
+   * synthesis step has a deterministic fallback so the simulator
+   * never fails just because the sixth request is rate-limited.
+   */
+
+  const createFallbackSynthesis = (): SimulationResult => {
+    const favorable = agentOutputs.filter(
+      (agent) => agent.stance === "favorable"
+    ).length;
+
+    const unfavorable = agentOutputs.filter(
+      (agent) => agent.stance === "unfavorable"
+    ).length;
+
+    const mixed = agentOutputs.filter(
+      (agent) => agent.stance === "mixed"
+    ).length;
+
+    const averageConfidence =
+      agentOutputs.length > 0
+        ? Math.round(
+            agentOutputs.reduce(
+              (sum, agent) => sum + agent.confidence,
+              0
+            ) / agentOutputs.length
+          )
+        : 50;
+
+    const allRisks = agentOutputs
+      .flatMap((agent) => agent.flaggedRisks)
+      .slice(0, 6);
+
+    const allOpportunities = agentOutputs
+      .flatMap((agent) => agent.flaggedOpportunities)
+      .slice(0, 6);
+
+    const allSupportingPoints = agentOutputs
+      .flatMap((agent) => agent.supportingPoints)
+      .slice(0, 6);
+
+    let recommendation =
+      "The decision should be tested cautiously because the agent council shows mixed signals.";
+
+    if (favorable > unfavorable && favorable >= mixed) {
+      recommendation =
+        "The agent council leans favorable, but the decision should still be introduced through a controlled test with clear guardrails.";
+    } else if (unfavorable > favorable && unfavorable >= mixed) {
+      recommendation =
+        "The agent council leans unfavorable, so the decision should be approached cautiously and validated with a limited test before broader rollout.";
+    }
+
+    const currentYear = new Date().getFullYear();
+
+    return {
+      analysis:
+        `${recommendation} ` +
+        `${favorable} agents are favorable, ${unfavorable} are unfavorable, and ${mixed} are mixed. ` +
+        `The council's average confidence is ${averageConfidence}%. ` +
+        `This synthesis is generated from the five independent agent assessments.`,
+
+      branches: [
+        {
+          title: "Base Case",
+          description:
+            "The decision is implemented in a controlled manner and the observed agent signals broadly match expectations.",
+          probability: 50,
+          timeline: [
+            {
+              year: currentYear,
+              title: "Controlled launch",
+              description:
+                "Run the decision as a bounded experiment and monitor the main business metrics.",
+              impact:
+                "Provides early evidence before committing to a larger rollout.",
+            },
+            {
+              year: currentYear + 1,
+              title: "Measure outcomes",
+              description:
+                "Compare customer, financial, risk, and market outcomes against the original baseline.",
+              impact:
+                "Creates evidence for whether the strategy should be expanded or adjusted.",
+            },
+          ],
+        },
+        {
+          title: "Upside Case",
+          description:
+            "The decision performs better than expected and favorable agent signals translate into measurable business improvement.",
+          probability: 30,
+          timeline: [
+            {
+              year: currentYear,
+              title: "Positive early signal",
+              description:
+                "Key business metrics improve during the controlled test.",
+              impact:
+                "Supports cautiously increasing the scope of the strategy.",
+            },
+            {
+              year: currentYear + 1,
+              title: "Scale carefully",
+              description:
+                "Expand the strategy while continuing to monitor risks and customer response.",
+              impact:
+                "Potential improvement in growth or business performance.",
+            },
+          ],
+        },
+        {
+          title: "Downside Case",
+          description:
+            "Negative customer, financial, competitive, or risk signals become material after implementation.",
+          probability: 20,
+          timeline: [
+            {
+              year: currentYear,
+              title: "Negative signal",
+              description:
+                "One or more monitored metrics deteriorate during the experiment.",
+              impact:
+                "Triggers review or rollback before broader deployment.",
+            },
+            {
+              year: currentYear + 1,
+              title: "Strategy adjustment",
+              description:
+                "The decision is modified, reduced, or reversed based on observed outcomes.",
+              impact:
+                "Limits downside exposure and protects long-term performance.",
+            },
+          ],
+        },
+      ],
+
+      evidence: agentOutputs.slice(0, 5).map((agent) => ({
+        title: `${agent.agentName} signal`,
+        source: agent.agentName,
+        summary:
+          agent.summary ||
+          "No additional summary was provided by this agent.",
+        credibility: Math.min(
+          10,
+          Math.max(
+            1,
+            Math.round(agent.confidence / 10)
+          )
+        ),
+      })),
+
+      confidence: averageConfidence,
+
+      keyInsights: [
+        `Council split: ${favorable} favorable, ${unfavorable} unfavorable, ${mixed} mixed.`,
+        ...allSupportingPoints.slice(0, 5),
+      ].slice(0, 8),
+
+      risks:
+        allRisks.length > 0
+          ? allRisks
+          : [
+              "Insufficient real-world data may reduce forecast reliability.",
+              "Actual customer and market behavior may differ from model expectations.",
+            ],
+
+      opportunities:
+        allOpportunities.length > 0
+          ? allOpportunities
+          : [
+              "Use a controlled experiment to validate the decision.",
+              "Expand the strategy only after positive signals are observed.",
+            ],
+
+      agentTrace: agentOutputs,
+    };
+  };
+
+  /*
+   * Try Gemini synthesis first.
+   * If Gemini returns a quota/rate-limit error or malformed output,
+   * automatically fall back to the local council synthesis.
+   */
+  try {
+    const synthesisSystemPrompt = `You are the Synthesis Agent for an agentic business-decision studio.
 
 You have received independent assessments from five specialized agents:
 - Revenue & Growth
@@ -393,9 +580,9 @@ Important:
 The evidence array contains AI-generated agent signals, NOT independently verified external evidence.
 Never imply that these are external sources.
 
-Keep every field concise so the final JSON remains compact.`;
+Keep every field concise.`;
 
-  const synthesisUserPrompt = `Decision: "${input.query}"
+    const synthesisUserPrompt = `Decision: "${input.query}"
 
 Category: ${input.category}
 
@@ -405,122 +592,71 @@ ${JSON.stringify(agentOutputs)}
 
 Synthesize these assessments into the required structured output.`;
 
-  const synthesisText = await generateGeminiText({
-    system: synthesisSystemPrompt,
-    prompt: synthesisUserPrompt,
-    maxTokens: 5000,
-    temperature: 0.3,
-    responseJsonSchema: SIMULATION_OUTPUT_SCHEMA,
-  });
+    const synthesisText = await generateGeminiText({
+      system: synthesisSystemPrompt,
+      prompt: synthesisUserPrompt,
+      maxTokens: 5000,
+      temperature: 0.3,
+      responseJsonSchema: SIMULATION_OUTPUT_SCHEMA,
+    });
 
-  const parsedResult = simulationSchema.safeParse(
-    extractJson(synthesisText)
-  );
+    const parsedResult = simulationSchema.safeParse(
+      extractJson(synthesisText)
+    );
 
-  if (!parsedResult.success) {
-    throw new Error(
-      `Synthesis Agent returned invalid structured output: ${parsedResult.error.message}`
+    if (parsedResult.success) {
+      const parsed = parsedResult.data;
+
+      return {
+        analysis: parsed.analysis || "No analysis generated",
+
+        branches: parsed.branches.map((b) => ({
+          title: b.title || "Untitled Branch",
+          description: b.description || "",
+          probability: Math.min(
+            100,
+            Math.max(0, b.probability || 50)
+          ),
+          timeline: b.timeline.map((t) => ({
+            year:
+              t.year || new Date().getFullYear(),
+            title: t.title || "",
+            description: t.description || "",
+            impact: t.impact || "",
+          })),
+        })),
+
+        evidence: parsed.evidence.map((e) => ({
+          title: e.title || "",
+          source: e.source || "",
+          summary: e.summary || "",
+          credibility: Math.min(
+            10,
+            Math.max(1, e.credibility || 5)
+          ),
+        })),
+
+        confidence: Math.min(
+          100,
+          Math.max(0, parsed.confidence || 50)
+        ),
+
+        keyInsights: parsed.keyInsights || [],
+        risks: parsed.risks || [],
+        opportunities: parsed.opportunities || [],
+        agentTrace: agentOutputs,
+      };
+    }
+
+    console.warn(
+      "Gemini synthesis returned invalid output. Using local fallback."
+    );
+  } catch (error) {
+    console.warn(
+      "Gemini synthesis unavailable. Using local fallback:",
+      error
     );
   }
 
-  const parsed = parsedResult.data;
-
-  return {
-    analysis: parsed.analysis || "No analysis generated",
-
-    branches: parsed.branches.map((b) => ({
-      title: b.title || "Untitled Branch",
-      description: b.description || "",
-      probability: Math.min(
-        100,
-        Math.max(0, b.probability || 50)
-      ),
-      timeline: b.timeline.map((t) => ({
-        year: t.year || new Date().getFullYear(),
-        title: t.title || "",
-        description: t.description || "",
-        impact: t.impact || "",
-      })),
-    })),
-
-    evidence: parsed.evidence.map((e) => ({
-      title: e.title || "",
-      source: e.source || "",
-      summary: e.summary || "",
-      credibility: Math.min(
-        10,
-        Math.max(1, e.credibility || 5)
-      ),
-    })),
-
-    confidence: Math.min(
-      100,
-      Math.max(0, parsed.confidence || 50)
-    ),
-
-    keyInsights: parsed.keyInsights || [],
-    risks: parsed.risks || [],
-    opportunities: parsed.opportunities || [],
-
-    agentTrace: agentOutputs,
-  };
-}
-
-export async function generateScenarioFromQuery(
-  query: string
-): Promise<{
-  title: string;
-  description: string;
-  category: string;
-  tags: string[];
-}> {
-  const text = await generateGeminiText({
-    system:
-      "You are a business-decision scenario generator. Return concise valid JSON containing title, description, category, and tags.",
-
-    prompt: query,
-
-    maxTokens: 1024,
-
-    temperature: 0.5,
-
-    responseJsonSchema: {
-      type: "object",
-      properties: {
-        title: {
-          type: "string",
-        },
-        description: {
-          type: "string",
-        },
-        category: {
-          type: "string",
-          enum: [
-            "PRICING",
-            "CART_RECOVERY",
-            "SUBSCRIPTION_CHURN",
-            "MARKET_ENTRY",
-            "DISPUTE_RISK",
-            "CASHFLOW",
-            "GROWTH",
-            "CUSTOMER_RETENTION",
-          ],
-        },
-        tags: {
-          type: "array",
-          items: {
-            type: "string",
-          },
-        },
-      },
-      required: [
-        "title",
-        "description",
-        "category",
-        "tags",
-      ],
-    },
-  });
-
-  return extractJson(text);
+  return createFallbackSynthesis();
 }
