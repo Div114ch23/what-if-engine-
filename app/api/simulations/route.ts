@@ -9,18 +9,32 @@ export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
   }
 
   const { searchParams } = new URL(request.url);
-  const limit = parseInt(searchParams.get("limit") || "10");
+  const limit = parseInt(
+    searchParams.get("limit") || "10"
+  );
 
   const simulations = await prisma.simulation.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: "desc" },
+    where: {
+      userId: session.user.id,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
     take: limit,
     include: {
-      scenario: { select: { title: true, slug: true } },
+      scenario: {
+        select: {
+          title: true,
+          slug: true,
+        },
+      },
     },
   });
 
@@ -31,36 +45,63 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
   }
 
-  // Check simulation limits
+  // Check simulation limits.
+  // Free/demo users get 50 simulations per calendar month.
+  // Premium and Admin users remain unlimited.
   const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: { subscriptions: true },
-  });
-
-  const isPremium = user?.role === "PREMIUM" || user?.role === "ADMIN";
-  const monthlyCount = await prisma.simulation.count({
     where: {
-      userId: session.user.id,
-      createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
+      id: session.user.id,
+    },
+    include: {
+      subscriptions: true,
     },
   });
 
-  if (!isPremium && monthlyCount >= 3) {
+  const isPremium =
+    user?.role === "PREMIUM" ||
+    user?.role === "ADMIN";
+
+  const monthlyCount = await prisma.simulation.count({
+    where: {
+      userId: session.user.id,
+      createdAt: {
+        gte: new Date(
+          new Date().getFullYear(),
+          new Date().getMonth(),
+          1
+        ),
+      },
+    },
+  });
+
+  const FREE_MONTHLY_LIMIT = 50;
+
+  if (!isPremium && monthlyCount >= FREE_MONTHLY_LIMIT) {
     return NextResponse.json(
-      { error: "Monthly simulation limit reached for this calendar month. Upgrade to Premium for unlimited simulations." },
+      {
+        error:
+          "Monthly simulation limit reached for this calendar month.",
+      },
       { status: 403 }
     );
   }
 
   const body = await request.json();
+
   const parsed = simulationQuerySchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid input", details: parsed.error.flatten() },
+      {
+        error: "Invalid input",
+        details: parsed.error.flatten(),
+      },
       { status: 400 }
     );
   }
@@ -84,7 +125,9 @@ export async function POST(request: NextRequest) {
     });
 
     const updated = await prisma.simulation.update({
-      where: { id: simulation.id },
+      where: {
+        id: simulation.id,
+      },
       data: {
         result: result as any,
         aiAnalysis: result.analysis,
@@ -99,19 +142,29 @@ export async function POST(request: NextRequest) {
         entity: "SIMULATION",
         entityId: simulation.id,
         userId: session.user.id,
-        metadata: { query: parsed.data.query, category: parsed.data.category },
+        metadata: {
+          query: parsed.data.query,
+          category: parsed.data.category,
+        },
       },
     });
 
     return NextResponse.json(updated);
   } catch (error) {
     await prisma.simulation.update({
-      where: { id: simulation.id },
-      data: { status: "FAILED" },
+      where: {
+        id: simulation.id,
+      },
+      data: {
+        status: "FAILED",
+      },
     });
 
     return NextResponse.json(
-      { error: "Simulation failed", message: (error as Error).message },
+      {
+        error: "Simulation failed",
+        message: (error as Error).message,
+      },
       { status: 500 }
     );
   }
